@@ -240,7 +240,6 @@ def main():
         test_metrics = eval(args, model, device, test_loader)
         print(f"Current epoch test AUC: {test_metrics['roc_auc']} | Diff with baseline: {test_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
         
-
         if test_metrics['roc_auc'] > best_test_metrics['roc_auc']:
             best_test_metrics = test_metrics
             
@@ -263,7 +262,9 @@ def main():
                 writer.add_scalar(f'data/test {metric}', test_metrics[metric], epoch)
 
         print("")
-    print(f"Best Test Set AUC: {best_test_metrics['roc_auc']} | Diff with pretrained: {best_test_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
+    finetuned_model_metrics = eval(args, model, device, test_loader)
+    print(f"Test Metrics after fine-tuning: AUC: {finetuned_model_metrics['roc_auc']}, Precision: {finetuned_model_metrics['precision']}, Recall: {finetuned_model_metrics['recall']}, F1: {finetuned_model_metrics['f1']}, MSE: {finetuned_model_metrics['mse']}, MAE: {finetuned_model_metrics['mae']}")
+    print(f"Diff with pretrained model: {finetuned_model_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
 
 
     if not args.filename == "":
