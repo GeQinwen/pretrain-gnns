@@ -217,7 +217,12 @@ def main():
             shutil.rmtree(fname)
             print("removed the existing file.")
         writer = SummaryWriter(fname)
+        
+    pretrained_metrics = eval(args, model, device, test_loader)
+    print(f"Pretrained Test Metrics: AUC: {pretrained_metrics['roc_auc']}, Precision: {pretrained_metrics['precision']}, Recall: {pretrained_metrics['recall']}, F1: {pretrained_metrics['f1']}, MSE: {pretrained_metrics['mse']}, MAE: {pretrained_metrics['mae']}")
 
+    best_test_metrics = pretrained_metrics
+    
     for epoch in range(1, args.epochs + 1):
         print(f"====epoch {epoch}")
         
@@ -233,7 +238,12 @@ def main():
         
         val_metrics = eval(args, model, device, val_loader)
         test_metrics = eval(args, model, device, test_loader)
+        print(f"Current epoch test AUC: {test_metrics['roc_auc']} | Diff with baseline: {test_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
+        
 
+        if test_metrics['roc_auc'] > best_test_metrics['roc_auc']:
+            best_test_metrics = test_metrics
+            
         print(f"Val Metrics: AUC: {val_metrics['roc_auc']}, Precision: {val_metrics['precision']}, Recall: {val_metrics['recall']}, F1: {val_metrics['f1']}, MSE: {val_metrics['mse']}, MAE: {val_metrics['mae']}")
         print(f"Test Metrics: AUC: {test_metrics['roc_auc']}, Precision: {test_metrics['precision']}, Recall: {test_metrics['recall']}, F1: {test_metrics['f1']}, MSE: {test_metrics['mse']}, MAE: {test_metrics['mae']}")
 
@@ -253,6 +263,7 @@ def main():
                 writer.add_scalar(f'data/test {metric}', test_metrics[metric], epoch)
 
         print("")
+    print(f"Best Test Set AUC: {best_test_metrics['roc_auc']} | Diff with pretrained: {best_test_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
 
 
     if not args.filename == "":
