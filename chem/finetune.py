@@ -21,6 +21,8 @@ import os
 import shutil
 
 from tensorboardX import SummaryWriter
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error
+
 
 criterion = nn.BCEWithLogitsLoss(reduction = "none")
 
@@ -46,6 +48,7 @@ def train(args, model, device, loader, optimizer):
         optimizer.step()
 
 
+
 def eval(args, model, device, loader):
     model.eval()
     y_true = []
@@ -53,28 +56,45 @@ def eval(args, model, device, loader):
 
     for step, batch in enumerate(tqdm(loader, desc="Iteration")):
         batch = batch.to(device)
-
         with torch.no_grad():
             pred = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
-
         y_true.append(batch.y.view(pred.shape))
-        y_scores.append(pred)
+        y_scores.append(pred.sigmoid())  # Use sigmoid to convert logits to probabilities
 
-    y_true = torch.cat(y_true, dim = 0).cpu().numpy()
-    y_scores = torch.cat(y_scores, dim = 0).cpu().numpy()
+    y_true = torch.cat(y_true, dim=0).cpu().numpy()
+    y_scores = torch.cat(y_scores, dim=0).cpu().numpy()
 
-    roc_list = []
+    metrics = {
+        'roc_auc': [],
+        'precision': [],
+        'recall': [],
+        'f1': [],
+        'mse': [],
+        'mae': []
+    }
+
     for i in range(y_true.shape[1]):
-        #AUC is only defined when there is at least one positive data.
-        if np.sum(y_true[:,i] == 1) > 0 and np.sum(y_true[:,i] == -1) > 0:
-            is_valid = y_true[:,i]**2 > 0
-            roc_list.append(roc_auc_score((y_true[is_valid,i] + 1)/2, y_scores[is_valid,i]))
+        if np.sum(y_true[:, i] == 1) > 0 and np.sum(y_true[:, i] == -1) > 0:
+            is_valid = y_true[:, i]**2 > 0
+            y_true_valid = (y_true[is_valid, i] + 1) / 2
+            y_scores_valid = y_scores[is_valid, i]
+            
+            metrics['roc_auc'].append(roc_auc_score(y_true_valid, y_scores_valid))
+            metrics['precision'].append(precision_score(y_true_valid, y_scores_valid > 0.5))
+            metrics['recall'].append(recall_score(y_true_valid, y_scores_valid > 0.5))
+            metrics['f1'].append(f1_score(y_true_valid, y_scores_valid > 0.5))
+            metrics['mse'].append(mean_squared_error(y_true_valid, y_scores_valid))
+            metrics['mae'].append(mean_absolute_error(y_true_valid, y_scores_valid))
 
-    if len(roc_list) < y_true.shape[1]:
+    # Compute the average for each metric
+    metrics_avg = {metric: np.mean(values) for metric, values in metrics.items()}
+
+    if len(metrics['roc_auc']) < y_true.shape[1]:
         print("Some target is missing!")
-        print("Missing ratio: %f" %(1 - float(len(roc_list))/y_true.shape[1]))
+        print("Missing ratio: %f" % (1 - float(len(metrics['roc_auc'])) / y_true.shape[1]))
 
-    return sum(roc_list)/len(roc_list) #y_true.shape[1]
+    return metrics_avg
+
 
 
 
@@ -197,33 +217,55 @@ def main():
             shutil.rmtree(fname)
             print("removed the existing file.")
         writer = SummaryWriter(fname)
+        
+    pretrained_metrics = eval(args, model, device, test_loader)
+    print(f"Pretrained Test Metrics: AUC: {pretrained_metrics['roc_auc']}, Precision: {pretrained_metrics['precision']}, Recall: {pretrained_metrics['recall']}, F1: {pretrained_metrics['f1']}, MSE: {pretrained_metrics['mse']}, MAE: {pretrained_metrics['mae']}")
 
-    for epoch in range(1, args.epochs+1):
-        print("====epoch " + str(epoch))
+    best_test_metrics = pretrained_metrics
+    
+    for epoch in range(1, args.epochs + 1):
+        print(f"====epoch {epoch}")
         
         train(args, model, device, train_loader, optimizer)
 
         print("====Evaluation")
         if args.eval_train:
-            train_acc = eval(args, model, device, train_loader)
+            train_metrics = eval(args, model, device, train_loader)
+            print(f"Train Metrics: AUC: {train_metrics['roc_auc']}, Precision: {train_metrics['precision']}, Recall: {train_metrics['recall']}, F1: {train_metrics['f1']}, MSE: {train_metrics['mse']}, MAE: {train_metrics['mae']}")
         else:
             print("omit the training accuracy computation")
-            train_acc = 0
-        val_acc = eval(args, model, device, val_loader)
-        test_acc = eval(args, model, device, test_loader)
+            train_metrics = {'roc_auc': 0, 'precision': 0, 'recall': 0, 'f1': 0, 'mse': 0, 'mae': 0}
+        
+        val_metrics = eval(args, model, device, val_loader)
+        test_metrics = eval(args, model, device, test_loader)
+        print(f"Current epoch test AUC: {test_metrics['roc_auc']} | Diff with baseline: {test_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
+        
+        if test_metrics['roc_auc'] > best_test_metrics['roc_auc']:
+            best_test_metrics = test_metrics
+            
+        print(f"Val Metrics: AUC: {val_metrics['roc_auc']}, Precision: {val_metrics['precision']}, Recall: {val_metrics['recall']}, F1: {val_metrics['f1']}, MSE: {val_metrics['mse']}, MAE: {val_metrics['mae']}")
+        print(f"Test Metrics: AUC: {test_metrics['roc_auc']}, Precision: {test_metrics['precision']}, Recall: {test_metrics['recall']}, F1: {test_metrics['f1']}, MSE: {test_metrics['mse']}, MAE: {test_metrics['mae']}")
 
-        print("train: %f val: %f test: %f" %(train_acc, val_acc, test_acc))
+        val_acc_list.append(val_metrics['roc_auc'])
+        test_acc_list.append(test_metrics['roc_auc'])
+        train_acc_list.append(train_metrics['roc_auc'])
 
-        val_acc_list.append(val_acc)
-        test_acc_list.append(test_acc)
-        train_acc_list.append(train_acc)
+        if args.filename:
+            writer.add_scalar('data/train auc', train_metrics['roc_auc'], epoch)
+            writer.add_scalar('data/val auc', val_metrics['roc_auc'], epoch)
+            writer.add_scalar('data/test auc', test_metrics['roc_auc'], epoch)
 
-        if not args.filename == "":
-            writer.add_scalar('data/train auc', train_acc, epoch)
-            writer.add_scalar('data/val auc', val_acc, epoch)
-            writer.add_scalar('data/test auc', test_acc, epoch)
+            # Add additional metrics to tensorboard
+            for metric in ['precision', 'recall', 'f1', 'mse', 'mae']:
+                writer.add_scalar(f'data/train {metric}', train_metrics[metric], epoch)
+                writer.add_scalar(f'data/val {metric}', val_metrics[metric], epoch)
+                writer.add_scalar(f'data/test {metric}', test_metrics[metric], epoch)
 
         print("")
+    finetuned_model_metrics = eval(args, model, device, test_loader)
+    print(f"Test Metrics after fine-tuning: AUC: {finetuned_model_metrics['roc_auc']}, Precision: {finetuned_model_metrics['precision']}, Recall: {finetuned_model_metrics['recall']}, F1: {finetuned_model_metrics['f1']}, MSE: {finetuned_model_metrics['mse']}, MAE: {finetuned_model_metrics['mae']}")
+    print(f"Diff with pretrained model: {finetuned_model_metrics['roc_auc'] - pretrained_metrics['roc_auc']}")
+
 
     if not args.filename == "":
         writer.close()

@@ -21,7 +21,7 @@ def get_test_acc(event_file):
 
 if __name__ == "__main__":
 
-    dataset_list = ["muv", "bace", "bbbp", "clintox", "hiv", "sider", "tox21", "toxcast"]
+    dataset_list = ["muv", "bace", "bbbp", "clintox", "hiv","pcba", "sider", "tox21", "toxcast"]
     #10 random seed
     seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     config_list = []

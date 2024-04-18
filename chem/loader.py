@@ -932,11 +932,12 @@ def _load_tox21_dataset(input_path):
     :return: list of smiles, list of rdkit mol obj, np.array containing the
     labels
     """
-    input_df = pd.read_csv(input_path, sep=',')
+    input_df = pd.read_csv(input_path, sep=',',encoding='latin1')
     smiles_list = input_df['smiles']
     rdkit_mol_objs_list = [AllChem.MolFromSmiles(s) for s in smiles_list]
-    tasks = ['NR-AR', 'NR-AR-LBD', 'NR-AhR', 'NR-Aromatase', 'NR-ER', 'NR-ER-LBD',
-       'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53']
+    #tasks = ['NR-AR', 'NR-AR-LBD', 'NR-AhR', 'NR-Aromatase', 'NR-ER', 'NR-ER-LBD',
+    #   'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53']
+    tasks = ['PCBA-1030','PCBA-1379','PCBA-1452','PCBA-1454','PCBA-1457','PCBA-1458','PCBA-1460']
     labels = input_df[tasks]
     # convert 0 to -1
     labels = labels.replace(0, -1)
