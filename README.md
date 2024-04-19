@@ -17,8 +17,8 @@ rdkit                     2019.03.1.0
 tqdm                      4.31.1
 tensorboardx              1.6
 ```
-Next step is to just run the following line in terminal under the `chem/`, also the same dictionary of `finetune_tune.sh`
-sh finetune_tune.sh SEED DEVICE
+Next step is to just run the following line in terminal under the `chem/` (also the same dictionary of `finetune_tune.sh`)
+run: `sh finetune_tune.sh SEED DEVICE`
 
 2. 
 Other results which evaluates the pretraining strategy on broader domains can be found in the `pretrain.ipynb`.
